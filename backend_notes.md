@@ -88,3 +88,33 @@ INFO:langgraph_api.cli:
   - Message flows from React → LangGraph server → router node → chat node → Gemini → back to React
   - useStream() receives and renders the response live
   - The full pipeline is working end to end
+
+---
+
+- This is where the graph gets smart. Right now `router_node` just returns `{"intent": "unknown"}` and everything goes to `chat`. Now, the router will read the user's message, use `Gemini` with **structured output** to classify it, and the graph will branch to the correct node.
+  - References for Structured Output - Langchain - Core Components - [Structured output](https://docs.langchain.com/oss/python/langchain/structured-output#structured-output) & Frontend - [Structured Output](https://docs.langchain.com/oss/python/langchain/frontend/structured-output#structured-output)
+- create the `Intent Schema` - `router.py`
+  - Pydantic + Literal types — Literal["finance", "movie", "journal", "chat"] tells the LLM it can only return one of these exact strings. If it tries to return "expense" or "financial" it gets rejected and retried automatically. This is what makes routing reliable.
+  - with_structured_output(method="json_schema") — For Gemini specifically, json_schema uses Gemini's native structured output mode which constrains the generation at the token level. It's more reliable than function_calling which relies on post-processing.
+  - The router only reads the last message — not the full history. This is intentional. Intent classification should be based on what the user just said, not the entire conversation. The full history goes to chat_node for context-aware responses.
+- Restart `langgraph dev`, then update the test button in `App.tsx` to try different messages
+
+```
+// Try each of these one at a time to verify routing works:
+"I spent 800 rupees on dinner"        // → should route to finance
+"I watched Interstellar last night"   // → should route to movie  
+"Today was really productive"         // → should route to journal
+"hello, who are you?"                 // → should route to chat
+```
+
+Watch your **backend terminal** for the router print statement:
+
+```
+[Router] intent=finance confidence=high
+[Router] intent=movie confidence=high
+[Router] intent=journal confidence=medium
+[Router] intent=chat confidence=high
+```
+
+- The frontend will show an error for `finance/movie/journal` because those nodes are still stubs returning `{}` with no messages - that's expected and fine. The important thing is seeing the router classify correctly in the terminal.
+- The graph now has `real conditional routing`. It's not hardcoded — the LLM decides the path based on natural language. This is the core of agentic systems and the thing most people in interviews haven't actually implemented.
