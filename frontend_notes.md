@@ -58,3 +58,10 @@ Done in 3.4s using pnpm v10.26.1
 
 - Update `frontend/src/App.tsx` to match the new state shape — specifically add the `ui` field so TypeScript knows about it.
 - `The graph always enters at the router node first. The router sets an intent field on state, then a conditional edge reads that intent and branches to the appropriate node - finance, movie, journal, or a fallback chat node. Each node returns updates that get merged back into state using reducers. The add_messages reducer appends rather than overwrites, which is how conversation history is preserved across turns.`
+
+---
+
+- Update the Frontend to Handle Interrupts:
+  - Now update `frontend/src/App.tsx` to handle the interrupt and show Approve/Reject buttons
+![alt text](test_run_results_images/finance_node_tests.png)
+![alt text](test_run_results_images/finance_node_approval_reject_view.png)

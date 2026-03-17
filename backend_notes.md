@@ -118,3 +118,21 @@ Watch your **backend terminal** for the router print statement:
 
 - The frontend will show an error for `finance/movie/journal` because those nodes are still stubs returning `{}` with no messages - that's expected and fine. The important thing is seeing the router classify correctly in the terminal.
 - The graph now has `real conditional routing`. It's not hardcoded — the LLM decides the path based on natural language. This is the core of agentic systems and the thing most people in interviews haven't actually implemented.
+
+---
+
+Let's work on setting up **Finance Node**: when you say "I spent ₹800 on dinner", the agent will extract structured expense data, confirm it with you before saving, and write it to a `SQLite` database. This is the first full end-to-end flow — natural language → structured extraction → human confirmation → DB write.
+
+- **Database Setup**:
+  - install `sqlalchemy` for the DB layer. - `uv add sqlalchemy`
+  - Create `backend/models/database.py`
+  - Create `backend/models/__init__.py`
+
+- Update our Finance Node - `backend/agent/nodes/finance.py`
+- Initialize DB on Server Start - Update `backend/agent/graph.py` — add one import and one call at the top
+  - from models.database import init_db   # ← add this
+  - init_db()
+- Update the Frontend to Handle Interrupts - Go to `frontend_notes.md`
+- Check your backend folder for `personal_os.db` - it should be created and contain the saved transaction - `Working as expected`
+
+- The finance node uses LangChain structured output to extract transaction data from natural language. Before writing to the database, the graph hits a LangGraph `interrupt()` checkpoint - this pauses execution entirely and serializes the graph state. The frontend detects the interrupt via `stream.interrupt` and renders a confirmation card. When the user clicks Approve, `stream.submit(null, { command: { resume: { approved: true } } })` resumes the graph from exactly where it paused, and the node writes to SQLite. This is human-in-the-loop at the graph level, not just a UI trick.

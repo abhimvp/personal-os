@@ -7,7 +7,10 @@ from agent.nodes.router import router_node
 from agent.nodes.finance import finance_node
 from agent.nodes.movie import movie_node
 from agent.nodes.journal import journal_node
+from models.database import init_db   # ← add this
 
+# Initialize DB tables when the graph module loads
+init_db() 
 
 # ── Core chat node ────────────────────────────────────────────────────────────
 # This is the main conversational node — it calls Gemini with the full
