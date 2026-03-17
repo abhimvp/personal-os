@@ -55,3 +55,6 @@ Done in 3.4s using pnpm v10.26.1
 - the frontend is able to test the connection with backend langgraph server. Looks cool.
 
 - **Learning Notes**: Understanding `useStream` - [Refer this doc if needed](./learning_notes/useStream.md).
+
+- Update `frontend/src/App.tsx` to match the new state shape — specifically add the `ui` field so TypeScript knows about it.
+- `The graph always enters at the router node first. The router sets an intent field on state, then a conditional edge reads that intent and branches to the appropriate node - finance, movie, journal, or a fallback chat node. Each node returns updates that get merged back into state using reducers. The add_messages reducer appends rather than overwrites, which is how conversation history is preserved across turns.`

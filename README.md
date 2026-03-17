@@ -225,3 +225,7 @@ Every feature is designed to answer a specific interview question:
 ---
 
 _Building in silence. Demo when core systems are ready._
+
+## Some rules
+
+- General rule for this project: `feat:` for new things, `fix:` for bug fixes, `chore:` for setup/config.

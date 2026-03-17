@@ -64,3 +64,27 @@ INFO:langgraph_api.cli:
 - 🎨 Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 - 📚 API Docs: http://127.0.0.1:2024/docs
 ```
+
+- create `state.py`
+  - Why separate file? Every node will import `AgentState`. Keeping it in its own file avoids circular imports as the project grows.
+  - Why `ui` field now? LangGraph needs ui declared in state from the start. Adding it later requires migrating existing threads.
+- create `llm.py`
+  - Why a separate file? All nodes will use the same LLM. One place to swap models, adjust temperature, or add callbacks.
+- Stub Node Files
+  - Let's Create these four empty node files. We'll fill them in later steps — but the graph needs to reference them now.
+  - `finance.py`
+  - `journal.py`
+  - `movie.py`
+  - `router.py`
+- Add the above nodes to our main `graph.py`
+- Add `__init__.py` files for python to treat folders as packages.
+- Restart the server: `langgraph dev`
+- Go to `https://ai.dev/rate-limit` - it shows your current quota per model. Pick any model that shows available quota and use that model string.
+
+![alt text](test_run_results_images/image.png)
+
+- What this setup shows:
+  - LangGraph server starts and loads the graph correctly
+  - Message flows from React → LangGraph server → router node → chat node → Gemini → back to React
+  - useStream() receives and renders the response live
+  - The full pipeline is working end to end
