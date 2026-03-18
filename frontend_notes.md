@@ -152,3 +152,30 @@ had an amazing weekend trip with friends, feeling grateful
 - Why No Interrupt for Journal?: "Journal entries are low-stakes writes - there's nothing destructive about logging a thought. The human-in-the-loop pattern adds friction that hurts the experience here. I made a deliberate architectural decision to only use interrupt() for financial writes and movie logs where the user might want to correct extracted data. Journal entries save immediately because the cost of being wrong is zero - you can always add another entry."
 
 ![alt text](test_run_results_images/journal_node_tests.png)
+
+---
+---
+---
+
+- Handle Multiple Interrupts on the Frontend: When two nodes run in parallel and both hit `interrupt()`, the thread state will have two interrupts. Update the `useEffect` in App.tsx to handle this.
+
+```md
+### 7.4 - Test It
+
+Restart `langgraph dev` and try these multi-intent messages:
+
+watched Interstellar halfway through and spent 800 on dinner
+
+Expected: `[Router] intents=['movie', 'finance']` → both cards appear → two confirm prompts
+
+today was a great day, paid my electricity bill of 1200
+
+Expected: `[Router] intents=['journal', 'finance']` → journal saves instantly, finance shows confirm
+
+finished The Bear and spent 500 on groceries and feeling grateful today
+
+Expected: [Router] intents=['movie', 'finance', 'journal'] → all three fire
+```
+
+- When the router detects multiple intents, instead of routing to one node, I use LangGraph's Send API to dispatch to multiple nodes simultaneously. Each Send() passes the current state to a different node as an independent branch. They execute in parallel as part of the same superstep. The add_messages reducer on state handles merging the results back. This is the map-reduce pattern - fan out to N nodes, results fan back in.
+![alt text](test_run_results_images/Multi_Intent_tests_1.png)

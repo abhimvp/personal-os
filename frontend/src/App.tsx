@@ -30,6 +30,13 @@ interface MovieInterrupt {
 
 type AnyInterrupt = FinanceInterrupt | MovieInterrupt;
 
+// Each interrupt now has an ID from LangGraph
+interface PendingInterrupt {
+  id: string;
+  value: AnyInterrupt;
+  decision?: "approved" | "rejected"; // tracks what user decided before submitting
+}
+
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -50,16 +57,15 @@ export default function App() {
   const [input, setInput] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [uiItems, setUiItems] = useState<any[]>([]);
-  const [pendingInterrupt, setPendingInterrupt] = useState<AnyInterrupt | null>(
-    null,
-  );
+  const [pendingInterrupts, setPendingInterrupts] = useState<
+    PendingInterrupt[]
+  >([]);
 
   const stream = useStream<AgentState>({
     apiUrl: "http://localhost:2024",
     assistantId: "personal_os",
     threadId: threadId ?? undefined,
     onThreadId: (id) => setThreadId(id),
-    // removed reconnectOnMount — it was auto-resuming the interrupt
     onCustomEvent: (event: any) => {
       if (event?.name && event?.props !== undefined) {
         setUiItems((prev) => {
@@ -71,19 +77,27 @@ export default function App() {
     },
   });
 
-  // Poll thread state to detect interrupt after run completes
+  // Poll thread state and capture interrupt IDs
   useEffect(() => {
     if (!threadId || stream.isLoading) return;
 
     fetch(`http://localhost:2024/threads/${threadId}/state`)
       .then((r) => r.json())
       .then((data) => {
-        if (data?.next?.length > 0 && data?.tasks?.[0]?.interrupts?.[0]) {
-          setPendingInterrupt(
-            data.tasks[0].interrupts[0].value as AnyInterrupt,
-          );
+        // console.log(
+        //   "Thread state tasks:",
+        //   JSON.stringify(data?.tasks, null, 2),
+        // );
+        if (data?.next?.length > 0 && data?.tasks?.length > 0) {
+          const allInterrupts: PendingInterrupt[] = data.tasks
+            .filter((t: any) => t.interrupts?.length > 0)
+            .map((t: any) => ({
+              id: t.interrupts[0].id,
+              value: t.interrupts[0].value as AnyInterrupt,
+            }));
+          setPendingInterrupts(allInterrupts);
         } else {
-          setPendingInterrupt(null);
+          setPendingInterrupts([]);
         }
       })
       .catch(() => {});
@@ -92,19 +106,69 @@ export default function App() {
   const handleSend = () => {
     if (!input.trim()) return;
     setUiItems([]);
-    setPendingInterrupt(null);
+    setPendingInterrupts([]);
     stream.submit({ messages: [{ type: "human", content: input }] });
     setInput("");
   };
 
-  const handleApprove = () => {
-    setPendingInterrupt(null);
-    stream.submit(null, { command: { resume: { approved: true } } });
-  };
+  const handleDecision = async (interruptId: string, approved: boolean) => {
+    const updated = pendingInterrupts.map((i) =>
+      i.id === interruptId
+        ? {
+            ...i,
+            decision: approved ? ("approved" as const) : ("rejected" as const),
+          }
+        : i,
+    );
 
-  const handleReject = () => {
-    setPendingInterrupt(null);
-    stream.submit(null, { command: { resume: { approved: false } } });
+    const allDecided = updated.every((i) => i.decision !== undefined);
+
+    if (allDecided) {
+      // Build a DICT not an array — this is what LangGraph expects
+      const resumeDict: Record<string, { approved: boolean }> = {};
+      updated.forEach((i) => {
+        resumeDict[i.id] = { approved: i.decision === "approved" };
+      });
+
+      // console.log("Resume dict:", JSON.stringify(resumeDict, null, 2));
+
+      setPendingInterrupts([]);
+
+      try {
+        const response = await fetch(
+          `http://localhost:2024/threads/${threadId}/runs/stream`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assistant_id: "personal_os",
+              command: { resume: resumeDict }, // ← dict, not array
+              stream_mode: ["messages-tuple", "values", "custom"],
+            }),
+          },
+        );
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            console.log("Resume chunk:", chunk.slice(0, 150));
+          }
+        }
+
+        // Reload thread by briefly clearing threadId
+        const currentThreadId = threadId;
+        setThreadId(null);
+        setTimeout(() => setThreadId(currentThreadId), 100);
+      } catch (e) {
+        console.error("Resume failed:", e);
+      }
+    } else {
+      setPendingInterrupts(updated);
+    }
   };
 
   return (
@@ -126,95 +190,111 @@ export default function App() {
         return Component ? <Component key={ui.id} {...ui.props} /> : null;
       })}
 
-      {/* Finance confirmation */}
-      {pendingInterrupt?.type === "finance_confirm" && (
+      {/* All pending interrupts — each with its own approve/reject */}
+      {pendingInterrupts.map((interrupt) => (
         <div
+          key={interrupt.id}
           style={{
-            border: "1px solid #444",
+            border: `1px solid ${interrupt.decision ? "#555" : "#444"}`,
             borderRadius: 8,
             padding: 16,
-            marginBottom: 16,
-            backgroundColor: "#1a1a1a",
+            marginBottom: 12,
+            backgroundColor: interrupt.decision ? "#111" : "#1a1a1a",
+            opacity: interrupt.decision ? 0.6 : 1,
           }}
         >
-          <p style={{ whiteSpace: "pre-line", marginBottom: 12 }}>
-            {(pendingInterrupt as FinanceInterrupt).message}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleApprove}
+          {/* Show decided state */}
+          {interrupt.decision && (
+            <p
               style={{
-                padding: "8px 16px",
-                backgroundColor: "#22c55e",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
+                color:
+                  interrupt.decision === "approved" ? "#22c55e" : "#ef4444",
+                marginBottom: 8,
+                fontSize: 13,
               }}
             >
-              ✅ Save it
-            </button>
-            <button
-              onClick={handleReject}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#ef4444",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-              }}
-            >
-              ❌ Cancel
-            </button>
-          </div>
-        </div>
-      )}
+              {interrupt.decision === "approved"
+                ? "✅ Approved — waiting for other confirmations..."
+                : "❌ Cancelled — waiting for other confirmations..."}
+            </p>
+          )}
 
-      {/* Movie confirmation */}
-      {pendingInterrupt?.type === "movie_confirm" && (
-        <div
-          style={{
-            border: "1px solid #444",
-            borderRadius: 8,
-            padding: 16,
-            marginBottom: 16,
-            backgroundColor: "#1a1a1a",
-          }}
-        >
-          <p style={{ marginBottom: 12 }}>
-            {(pendingInterrupt as MovieInterrupt).message}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleApprove}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#22c55e",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-              }}
-            >
-              ✅ Log it
-            </button>
-            <button
-              onClick={handleReject}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#ef4444",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-              }}
-            >
-              ❌ Cancel
-            </button>
-          </div>
+          {/* Finance interrupt */}
+          {interrupt.value.type === "finance_confirm" &&
+            !interrupt.decision && (
+              <>
+                <p style={{ whiteSpace: "pre-line", marginBottom: 12 }}>
+                  {(interrupt.value as FinanceInterrupt).message}
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() => handleDecision(interrupt.id, true)}
+                    style={{
+                      padding: "8px 16px",
+                      backgroundColor: "#22c55e",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✅ Save it
+                  </button>
+                  <button
+                    onClick={() => handleDecision(interrupt.id, false)}
+                    style={{
+                      padding: "8px 16px",
+                      backgroundColor: "#ef4444",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ❌ Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+          {/* Movie interrupt */}
+          {interrupt.value.type === "movie_confirm" && !interrupt.decision && (
+            <>
+              <p style={{ marginBottom: 12 }}>
+                {(interrupt.value as MovieInterrupt).message}
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => handleDecision(interrupt.id, true)}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#22c55e",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✅ Log it
+                </button>
+                <button
+                  onClick={() => handleDecision(interrupt.id, false)}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#ef4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  ❌ Cancel
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      )}
+      ))}
 
       {stream.isLoading && <p style={{ color: "#888" }}>Thinking...</p>}
 
@@ -223,7 +303,7 @@ export default function App() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Try: watched Interstellar halfway through"
+          placeholder="Try: watched Interstellar and spent 800 on dinner"
           style={{
             flex: 1,
             padding: "8px 12px",

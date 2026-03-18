@@ -152,3 +152,35 @@ The **Journal Node** - Simplest node in the project but still demonstrates the f
 - Add the Journal Table : Update `backend/models/database.py` — add the `JournalEntry` model.
 - The Journal Node : Create `backend/agent/nodes/journal.py`
 - Frontend_notes : JournalEntryCard Component : Create `frontend/src/components/ui/JournalEntryCard.tsx`
+
+---
+---
+
+- **Multi-Intent Detection**: This is the most architecturally impressive step. When a user says "watched Interstellar halfway through and spent ₹800 on dinner", the agent needs to detect two intents, run both nodes in parallel, and handle both confirmations. This is what separates a real agentic system from a chatbot.
+
+- **What we're Building**
+
+```
+User: "watched Interstellar and spent 800 on dinner"
+              │
+              ▼
+        Intent Router
+        detects: ["movie", "finance"]
+              │
+      ┌───────┴───────┐
+      ▼               ▼
+  Movie Node     Finance Node
+  (parallel)     (parallel)
+      │               │
+      └───────┬───────┘
+              ▼
+     Both cards render
+     Both confirmations shown
+```
+
+- LangGraph handles [parallel execution](https://forum.langchain.com/t/best-practices-for-parallel-nodes-fanouts/1900/4) natively — if the router returns multiple Send objects, each node runs as its own branch simultaneously.
+  - [Refer Docs](https://forum.langchain.com/t/parallel-execution-with-supervisor-pattern/1665)
+  - [Refer Example](https://medium.com/@ameejais0999/parallel-workflows-in-langgraph-a-practical-approach-6e4340ceb8d4)
+
+- Update the Router Schema: Update `backend/agent/nodes/router.py` — the router now detects multiple intents.
+- Update the Graph for Parallel Execution: This is the key architectural change. Update `backend/agent/graph.py`
