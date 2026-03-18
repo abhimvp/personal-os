@@ -184,3 +184,19 @@ User: "watched Interstellar and spent 800 on dinner"
 
 - Update the Router Schema: Update `backend/agent/nodes/router.py` — the router now detects multiple intents.
 - Update the Graph for Parallel Execution: This is the key architectural change. Update `backend/agent/graph.py`
+
+---
+---
+---
+
+- **Dashboard Step — Full Tabbed Dashboard**
+
+We need two things: backend API endpoints to serve the stored data, and React components to display it in tabs.We need two things: backend API endpoints to serve the stored data, and React components to display it in tabs.
+
+LangGraph dev server only serves the graph. We need a separate FastAPI server for our data endpoints.
+
+- Create `backend/api.py`
+  - `uv add fastapi --extra standard`
+  - you can run the FastAPI application with:`uv run fastapi dev`
+  - `uv add uvicorn`
+  - In terminal - `uvicorn api:app --port 8000 --reload` - Go to `http://127.0.0.1:8000/docs`

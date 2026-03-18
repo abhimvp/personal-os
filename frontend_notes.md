@@ -179,3 +179,15 @@ Expected: [Router] intents=['movie', 'finance', 'journal'] → all three fire
 
 - When the router detects multiple intents, instead of routing to one node, I use LangGraph's Send API to dispatch to multiple nodes simultaneously. Each Send() passes the current state to a different node as an independent branch. They execute in parallel as part of the same superstep. The add_messages reducer on state handles merging the results back. This is the map-reduce pattern - fan out to N nodes, results fan back in.
 ![alt text](test_run_results_images/Multi_Intent_tests_1.png)
+
+---
+---
+---
+
+- Frontend - Tab Components:
+  - Create frontend/src/components/dashboard/FinanceTab.tsx
+  - Create frontend/src/components/dashboard/MoviesTab.tsx
+  - Create frontend/src/components/dashboard/JournalTab.tsx
+  - Wire It All Together in App.tsx
+
+![alt text](test_run_results_images/MainView.png)

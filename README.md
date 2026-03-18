@@ -4,6 +4,10 @@
 
 ---
 
+## Current View
+
+![alt text](test_run_results_images/MainView.png)
+
 ## 💡 The Idea
 
 Most productivity apps fail because they require too much manual effort - opening a screen, finding the right section, filling out a form. This project eliminates all of that.
