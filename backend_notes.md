@@ -136,3 +136,11 @@ Let's work on setting up **Finance Node**: when you say "I spent ₹800 on dinne
 - Check your backend folder for `personal_os.db` - it should be created and contain the saved transaction - `Working as expected`
 
 - The finance node uses LangChain structured output to extract transaction data from natural language. Before writing to the database, the graph hits a LangGraph `interrupt()` checkpoint - this pauses execution entirely and serializes the graph state. The frontend detects the interrupt via `stream.interrupt` and renders a confirmation card. When the user clicks Approve, `stream.submit(null, { command: { resume: { approved: true } } })` resumes the graph from exactly where it paused, and the node writes to SQLite. This is human-in-the-loop at the graph level, not just a UI trick.
+
+---
+
+Let's work on **Movie Node** - Same pattern as finance but with two differences - movie tracking has richer data (mood tags, progress, context tags) and this is the step where we introduce **Generative UI** for the first time. The agent will push a `MovieLogCard` React component directly from the graph.
+
+- Add the Movie Table: Update `backend/models/database.py` — add the `Movie` model.
+- The Movie Node - Create `backend/agent/nodes/movie.py`
+- Register the UI Component - `frontend_notes.md`

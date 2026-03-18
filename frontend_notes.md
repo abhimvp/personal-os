@@ -65,3 +65,66 @@ Done in 3.4s using pnpm v10.26.1
   - Now update `frontend/src/App.tsx` to handle the interrupt and show Approve/Reject buttons
 ![alt text](test_run_results_images/finance_node_tests.png)
 ![alt text](test_run_results_images/finance_node_approval_reject_view.png)
+
+---
+
+- Register the UI Component:
+  - This is the Generative UI part. The backend pushes "movie_log_card" and the frontend needs a component registered under that name.
+  - Create `frontend/src/components/ui/MovieLogCard.tsx`
+- Wire Generative UI into App.tsx:
+  - Update `frontend/src/App.tsx` to handle both the ui state (for rendering pushed components) and the movie interrupt.
+
+```md
+### 5.5 — Test It
+
+Restart `langgraph dev` and try:
+```
+
+watched Interstellar halfway through, it was mind blowing
+
+```
+
+You should see:
+1. Router classifies as `movie`
+2. **MovieLogCard renders inline** in the chat with title, status, mood tags
+3. Confirmation prompt appears below it
+4. Click **Log it** → saved to DB, confirmation message appears
+
+Also try:
+```
+
+finished The Bear, it was emotionally exhausting but brilliant
+added Dune Part 3 to my watchlist
+
+Try these one at a time, each in a fresh page refresh (so you get a new thread):
+
+**Test 1 — Basic watching with mood:**
+
+```
+watched Interstellar halfway through, it was mind blowing
+```
+
+Expected: card shows `Watching`, progress `halfway`, mood tag `Mind-blowing`
+
+**Test 2 — Completed with emotional tag:**
+
+```
+just finished The Bear season 2, it was intense and emotional
+```
+
+Expected: card shows `Completed`, mood tags like `Intense`, `Emotional`
+
+**Test 3 — Adding to watchlist:**
+
+```
+want to watch Dune Part 2 sometime, heard it's epic
+```
+
+Expected: card shows `Planned`, maybe a context tag like `Epic`
+
+---
+
+For each one — card should appear → confirm buttons show → click **Log it** → single confirmation message → no duplicate card. Let me know how all three go.
+
+![alt text](test_run_results_images/Movie_node_tests.png)
+![alt text](test_run_results_images/Movie_node_tests_2.png)

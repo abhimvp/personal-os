@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import type { Message } from "@langchain/langgraph-sdk";
+import { MovieLogCard } from "./components/ui/MovieLogCard";
 
 interface AgentState {
   messages: Message[];
@@ -8,7 +9,6 @@ interface AgentState {
   intent: string;
 }
 
-// Shape of the interrupt value from finance_node
 interface FinanceInterrupt {
   type: "finance_confirm";
   extracted: {
@@ -21,50 +21,92 @@ interface FinanceInterrupt {
   message: string;
 }
 
+interface MovieInterrupt {
+  type: "movie_confirm";
+  extracted: Record<string, unknown>;
+  message: string;
+}
+
+type AnyInterrupt = FinanceInterrupt | MovieInterrupt;
+
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text)
+    return (content as any[])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
       .join("");
   }
   return "";
 }
 
+const UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
+  movie_log_card: MovieLogCard,
+};
+
 export default function App() {
   const [input, setInput] = useState("");
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [uiItems, setUiItems] = useState<any[]>([]);
+  const [pendingInterrupt, setPendingInterrupt] = useState<AnyInterrupt | null>(
+    null,
+  );
 
   const stream = useStream<AgentState>({
     apiUrl: "http://localhost:2024",
     assistantId: "personal_os",
+    threadId: threadId ?? undefined,
+    onThreadId: (id) => setThreadId(id),
+    // removed reconnectOnMount — it was auto-resuming the interrupt
+    onCustomEvent: (event: any) => {
+      if (event?.name && event?.props !== undefined) {
+        setUiItems((prev) => {
+          const exists = prev.find((u) => u.id === event.id);
+          if (exists) return prev;
+          return [...prev, event];
+        });
+      }
+    },
   });
 
-  // The current interrupt value (if graph is paused)
-  const interrupt = stream.interrupt?.value as FinanceInterrupt | undefined;
+  // Poll thread state to detect interrupt after run completes
+  useEffect(() => {
+    if (!threadId || stream.isLoading) return;
+
+    fetch(`http://localhost:2024/threads/${threadId}/state`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.next?.length > 0 && data?.tasks?.[0]?.interrupts?.[0]) {
+          setPendingInterrupt(
+            data.tasks[0].interrupts[0].value as AnyInterrupt,
+          );
+        } else {
+          setPendingInterrupt(null);
+        }
+      })
+      .catch(() => {});
+  }, [threadId, stream.isLoading]);
 
   const handleSend = () => {
     if (!input.trim()) return;
+    setUiItems([]);
+    setPendingInterrupt(null);
     stream.submit({ messages: [{ type: "human", content: input }] });
     setInput("");
   };
 
   const handleApprove = () => {
-    // Resume the graph with approved=true
-    stream.submit(null, {
-      command: { resume: { approved: true } },
-    });
+    setPendingInterrupt(null);
+    stream.submit(null, { command: { resume: { approved: true } } });
   };
 
   const handleReject = () => {
-    // Resume the graph with approved=false
-    stream.submit(null, {
-      command: { resume: { approved: false } },
-    });
+    setPendingInterrupt(null);
+    stream.submit(null, { command: { resume: { approved: false } } });
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
+    <div style={{ padding: 24, maxWidth: 640, margin: "0 auto" }}>
       <h1>Personal OS</h1>
 
       {/* Message thread */}
@@ -76,8 +118,14 @@ export default function App() {
         ))}
       </div>
 
-      {/* Human-in-the-loop confirmation card */}
-      {interrupt && interrupt.type === "finance_confirm" && (
+      {/* Generative UI cards */}
+      {uiItems.map((ui) => {
+        const Component = UI_COMPONENTS[ui.name];
+        return Component ? <Component key={ui.id} {...ui.props} /> : null;
+      })}
+
+      {/* Finance confirmation */}
+      {pendingInterrupt?.type === "finance_confirm" && (
         <div
           style={{
             border: "1px solid #444",
@@ -88,7 +136,7 @@ export default function App() {
           }}
         >
           <p style={{ whiteSpace: "pre-line", marginBottom: 12 }}>
-            {interrupt.message}
+            {(pendingInterrupt as FinanceInterrupt).message}
           </p>
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -121,16 +169,59 @@ export default function App() {
         </div>
       )}
 
-      {/* Loading indicator */}
+      {/* Movie confirmation */}
+      {pendingInterrupt?.type === "movie_confirm" && (
+        <div
+          style={{
+            border: "1px solid #444",
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 16,
+            backgroundColor: "#1a1a1a",
+          }}
+        >
+          <p style={{ marginBottom: 12 }}>
+            {(pendingInterrupt as MovieInterrupt).message}
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleApprove}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#22c55e",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              ✅ Log it
+            </button>
+            <button
+              onClick={handleReject}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#ef4444",
+                color: "white",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              ❌ Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {stream.isLoading && <p style={{ color: "#888" }}>Thinking...</p>}
 
-      {/* Input */}
       <div style={{ display: "flex", gap: 8 }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Try: I spent 800 on dinner"
+          placeholder="Try: watched Interstellar halfway through"
           style={{
             flex: 1,
             padding: "8px 12px",
