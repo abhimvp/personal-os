@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import type { Message } from "@langchain/langgraph-sdk";
 import { MovieLogCard } from "./components/ui/MovieLogCard";
+import { JournalEntryCard } from "./components/ui/JournalEntryCard";
 
 interface AgentState {
   messages: Message[];
@@ -42,6 +43,7 @@ function extractText(content: unknown): string {
 
 const UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   movie_log_card: MovieLogCard,
+  journal_entry_card: JournalEntryCard,
 };
 
 export default function App() {

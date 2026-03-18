@@ -1,4 +1,13 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, JSON
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    String,
+    Float,
+    DateTime,
+    JSON,
+    Text,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone
 
@@ -22,11 +31,22 @@ class MovieLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String, nullable=False)
-    status = Column(String, default="watching")  # watching, completed, dropped, planned
-    progress = Column(String, nullable=True)  # "halfway", "1hr in", "episode 3", etc.
-    mood_tags = Column(JSON, default=list)  # ["Emotional Climax", "Inspirational"]
-    context_tags = Column(JSON, default=list)  # ["Watch on Sunday Morning"]
+    status = Column(String, default="watching")
+    progress = Column(String, nullable=True)
+    mood_tags = Column(JSON, default=list)
+    context_tags = Column(JSON, default=list)
     notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class JournalEntry(Base):
+    __tablename__ = "journal_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    content = Column(Text, nullable=False)  # the actual journal text
+    mood = Column(String, nullable=True)  # happy, reflective, anxious, etc.
+    tags = Column(JSON, default=list)  # ["work", "personal", "travel"]
+    reminder_days = Column(Integer, default=7)  # remind to revisit in N days
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

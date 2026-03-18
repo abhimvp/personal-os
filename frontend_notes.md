@@ -128,3 +128,27 @@ For each one — card should appear → confirm buttons show → click **Log it*
 
 ![alt text](test_run_results_images/Movie_node_tests.png)
 ![alt text](test_run_results_images/Movie_node_tests_2.png)
+
+---
+---
+---
+
+- JournalEntryCard Component - Create `frontend/src/components/ui/JournalEntryCard.tsx`
+- Register in App.tsx : Two small additions to App.tsx
+
+```md
+### 6.5 - Test It
+
+Restart `langgraph dev` and try:
+---
+today was really productive, shipped a big feature at work
+---
+feeling a bit anxious about the presentation tomorrow
+---
+had an amazing weekend trip with friends, feeling grateful
+```
+
+- Each should: router classifies as journal → card appears instantly → confirmation message → no confirm buttons (intentional, no interrupt).
+- Why No Interrupt for Journal?: "Journal entries are low-stakes writes - there's nothing destructive about logging a thought. The human-in-the-loop pattern adds friction that hurts the experience here. I made a deliberate architectural decision to only use interrupt() for financial writes and movie logs where the user might want to correct extracted data. Journal entries save immediately because the cost of being wrong is zero - you can always add another entry."
+
+![alt text](test_run_results_images/journal_node_tests.png)

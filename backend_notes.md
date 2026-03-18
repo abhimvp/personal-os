@@ -144,3 +144,11 @@ Let's work on **Movie Node** - Same pattern as finance but with two differences 
 - Add the Movie Table: Update `backend/models/database.py` — add the `Movie` model.
 - The Movie Node - Create `backend/agent/nodes/movie.py`
 - Register the UI Component - `frontend_notes.md`
+
+---
+
+The **Journal Node** - Simplest node in the project but still demonstrates the full pattern. One difference from movie/finance - journal entries don't need a confirmation step. A one-liner thought should just save instantly and acknowledge. This is a good example of **knowing when NOT to use human-in-the-loop**.
+
+- Add the Journal Table : Update `backend/models/database.py` — add the `JournalEntry` model.
+- The Journal Node : Create `backend/agent/nodes/journal.py`
+- Frontend_notes : JournalEntryCard Component : Create `frontend/src/components/ui/JournalEntryCard.tsx`
