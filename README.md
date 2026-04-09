@@ -1,235 +1,185 @@
-# 🧠 Personal OS - A Jarvis-Style Life Tracker
+# Personal OS - A Jarvis-Style Life Tracker
 
-> A "Personal OS" built with LangGraph, LangChain, and React that lets you manage your entire life - finances, movies, journaling, and travel - through natural language. No forms. No dashboards. Just talk to it.
-
----
-
-## Current View
-
-![alt text](test_run_results_images/MainView.png)
-
-## 💡 The Idea
-
-Most productivity apps fail because they require too much manual effort - opening a screen, finding the right section, filling out a form. This project eliminates all of that.
-
-**You type (or say) one sentence. The AI handles the rest.**
+A conversational life tracker built with LangGraph, LangChain, and React. Log finances, movies, and journal entries through natural language - no forms, no navigation, just talk to it.
 
 > _"I watched Interstellar halfway through last night and spent ₹800 on dinner"_
+>
+> The agent detects two intents, fans out to both nodes in parallel, pushes rich UI cards inline in the chat, and only commits after you approve each one.
 
-The agent detects two actions, logs both, pushes rich UI cards inline in the chat for confirmation, and only commits the data after you approve. No forms. No navigation. Just a conversation.
-
-This is built on **LangGraph's Generative UI** pattern - the agent doesn't just reply with text, it renders real React components directly inside the chat based on what it understood.
-
-- [Track My Life](https://abhimvp.dev/) - go to innovation section of the page.
+![Main View](test_run_results_images/MainView.png)
 
 ---
 
-## 🏗️ Architecture Overview
+## Architecture
 
 ```
 User Message (Natural Language)
         │
         ▼
 ┌─────────────────────┐
-│   Intent Router     │  ← LangGraph Node: classifies intent(s)
-│   (LangChain LLM)   │    detects if 1 or multiple actions needed
+│   Intent Router     │  ← Gemini structured output → IntentClassification
+│   (Pydantic schema) │    detects 1 or multiple intents
 └────────┬────────────┘
          │
-   ┌─────┴──────┬──────────────┬──────────────┐
-   ▼            ▼              ▼              ▼
-Finance      Movie          Journal        Trip Log
- Node         Node           Node           Node
-   │            │              │              │
-   └─────┬──────┴──────────────┴──────────────┘
+   fan_out_by_intent()  ← returns Send() objects for parallel execution
          │
-         ▼
-┌─────────────────────┐
-│  Human-in-the-Loop  │  ← LangGraph interrupt()
-│  Confirmation Node  │    Pushes ConfirmCard to React UI
-└────────┬────────────┘
-         │ User approves / rejects
-         ▼
-┌─────────────────────┐
-│   Write to DB       │  ← Commits data, logs to Audit Trail
-│   + Audit Logger    │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Memory Update      │  ← Updates Chroma vector store
-│  (Chroma Vector DB) │    Agent learns your patterns over time
-└─────────────────────┘
+   ┌─────┴──────┬──────────────┐
+   ▼            ▼              ▼
+Finance      Movie          Journal
+ Node         Node           Node
+   │            │              │
+   │       push_ui_message()   │  ← Generative UI: renders React components from the graph
+   │            │              │
+   ├── interrupt() ────────────┘  ← Finance + Movie pause for confirmation
+   │                                 Journal saves instantly (intentional — low-stakes writes)
+   ▼
+ User approves / rejects each
+   │
+   ▼
+ Write to SQLite
 ```
 
----
-
-## ✨ Core Features
-
-### 🤖 Central AI Agent (The "Jarvis" Layer)
-
-The heart of the project. A LangGraph `StateGraph` that accepts natural language, routes to the right module, and manages the full lifecycle of every action.
-
-- **Intent Routing** - classifies what the user wants and which module(s) to involve
-- **Multi-Intent Detection** - one message can trigger multiple nodes in parallel (e.g., log a movie _and_ an expense simultaneously)
-- **Structured Output** - uses LangChain tool binding to extract clean, typed data from messy natural language
-- **Human-in-the-Loop** - graph pauses before any write, renders a confirmation card in the UI, and resumes only after user approval
-- **Context Awareness** - reads from Chroma vector store to understand your patterns (_"you usually mark drama films as Emotional Climax"_)
-
-### 💬 Generative UI (LangGraph + React)
-
-The agent renders rich React components directly in the chat. No static dashboard — the UI is _generated_ based on what the agent understood.
-
-| Agent Action                     | UI Component Rendered                                    |
-| -------------------------------- | -------------------------------------------------------- |
-| Parsed a movie entry             | `MovieLogCard` - title, progress bar, mood tags          |
-| Parsed an expense                | `ExpenseCard` - amount, category, account                |
-| Parsed a journal entry           | `JournalEntryCard` - text, timestamp, mood               |
-| Needs confirmation before saving | `ConfirmActionCard` - summary + Approve / Reject buttons |
-| Multiple actions detected        | `BatchActionCard` - all pending actions listed           |
-| Trip summary requested           | `TripSummaryCard` - stops, bills, total cost             |
-
-### 📓 Mind & Media Module
-
-Track what you watch and what you think.
-
-- **Movie / Show Tracking** - log title, progress (multi-session), mood tags (`"Emotional Climax"`, `"Inspirational"`), and context tags (`"Watch on Sunday Morning"`)
-- **One-Liner Journaling** - quick thoughts and memories. Agent adds a smart reminder to revisit them later
-- **Natural language queries** - _"What have I been journaling about lately?"_ or _"Show me all movies I marked as Inspirational"_
-
-### 💰 Wallet & Wanderlust Module
-
-Track money across currencies, accounts, and trips.
-
-- **Smart Finance** - multi-currency expense and income tracker across different accounts
-- **Trip Logs** - a "sub-Splitwise" feature. Log every stop, bill, and note during travel. At any point, ask the agent to auto-summarize the entire trip cost
-- **Calendar Integration** - sync scheduled payments and view a timeline of your financial activity
-
-### 🧾 Audit Trail
-
-Every agent decision is logged - what it understood, what it planned to do, whether the user approved or rejected, and what was finally committed. Fully visible in the React UI as an expandable decision log.
+One message can trigger multiple nodes simultaneously. The router classifies intent into a typed list using `with_structured_output(method="json_schema")`, and `fan_out_by_intent()` dispatches `Send()` objects for parallel execution. Each branch runs independently in the same superstep, and the `add_messages` reducer merges results back into state.
 
 ---
 
-## 🛠️ Tech Stack
+## What's Built
 
-| Layer           | Technology                                             |
-| --------------- | ------------------------------------------------------ |
-| Agent Framework | LangGraph (StateGraph, interrupt, subgraphs)           |
-| LLM / Tools     | LangChain (tool binding, structured output, LCEL)      |
-| Memory          | Chroma (vector store for context awareness)            |
-| Backend         | Python + FastAPI                                       |
-| Frontend        | React + TypeScript                                     |
-| Streaming UI    | LangGraph `useStream()` hook + `LoadExternalComponent` |
-| Database        | SQLite (dev) / PostgreSQL (prod)                       |
-| LLM Provider    | OpenAI GPT-4o / Anthropic Claude / Gemini              |
+**Agent layer** — LangGraph `StateGraph` with conditional routing, parallel fan-out via the Send API, and `interrupt()` for human-in-the-loop confirmation. The router uses Pydantic + Literal types to constrain classification to exact intent strings.
 
----
+**Finance node** — Extracts amount, currency, category, description, and type from natural language. Pauses with `interrupt()` before writing. On approval, commits to SQLite via SQLAlchemy.
 
-## 🧩 LangGraph Concepts Used
+**Movie node** — Extracts title, viewing status, progress, mood tags, context tags, and notes. Pushes a `MovieLogCard` React component directly from the graph using `push_ui_message()` (Generative UI). Pauses for confirmation before saving.
 
-This project is intentionally designed to demonstrate the full range of LangGraph capabilities:
+**Journal node** — Extracts content, mood, topic tags, and a reminder interval. Saves instantly without confirmation — a deliberate architectural decision since journal entries are low-stakes and confirmation adds friction with zero benefit.
 
-- **`StateGraph`** - core graph with typed state passed between nodes
-- **Conditional Edges** - router branches to different nodes based on intent classification
-- **Parallel Node Execution** - multi-intent messages fan out to multiple nodes simultaneously
-- **`interrupt()`** - human-in-the-loop pause before write operations
-- **Subgraphs** - trip log module uses a nested subgraph for multi-stop logging
-- **Persistence / Checkpointing** - graph state is saved so sessions can be resumed
-- **Generative UI** - `push_ui_message()` sends typed React components from the graph to the frontend
-- **Memory** - Chroma vector store integrated into state for context-aware decisions
+**Multi-intent handling** — "Watched Interstellar and spent ₹800 on dinner" fans out to movie + finance nodes in parallel. Both hit `interrupt()` simultaneously, each gets its own interrupt ID. All decisions are collected before a single resume call using the `{interrupt_id: value}` dict format.
+
+**Dashboard** — Three clickable stat tiles (Finance, Movies, Journal) that open modal overlays with full data views. Powered by a separate FastAPI server with REST endpoints.
+
+**Frontend** — Dark gradient UI with DM Sans typography, bubble-style chat, inline Generative UI cards, and interrupt-based confirmation flow. Built with React + TypeScript + Vite, connected via `@langchain/langgraph-sdk`'s `useStream()` hook.
 
 ---
 
-## 📁 Project Structure (Planned)
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Agent Framework | LangGraph (StateGraph, interrupt, Send API) |
+| LLM | Google Gemini via `langchain-google-genai` |
+| Structured Output | LangChain `with_structured_output(method="json_schema")` |
+| Backend | Python + FastAPI |
+| Package Manager (Python) | `uv` |
+| Frontend | React + TypeScript + Vite |
+| Package Manager (JS) | `pnpm` |
+| Streaming UI | `@langchain/langgraph-sdk` — `useStream()` hook |
+| Database | SQLite via SQLAlchemy |
+
+---
+
+## LangGraph Concepts Demonstrated
+
+- **`StateGraph`** with `TypedDict` state and `Annotated` reducers (`add_messages`, `ui_message_reducer`)
+- **Conditional edges** — router branches to different nodes based on LLM intent classification
+- **Send API** — parallel fan-out for multi-intent messages (map-reduce pattern)
+- **`interrupt()`** — human-in-the-loop pause before write operations
+- **`push_ui_message()`** — Generative UI: the agent renders typed React components directly in the chat
+- **`useStream()`** — React hook with `onCustomEvent` for real-time streaming and UI card rendering
+
+---
+
+## Project Structure
 
 ```
 personal-os/
 ├── backend/
 │   ├── agent/
-│   │   ├── graph.py           # Main StateGraph definition
-│   │   ├── router.py          # Intent classification node
-│   │   ├── nodes/
-│   │   │   ├── finance.py     # Finance tool node
-│   │   │   ├── movie.py       # Movie tracker node
-│   │   │   ├── journal.py     # Journal node
-│   │   │   └── trip.py        # Trip log subgraph
-│   │   ├── memory.py          # Chroma vector store integration
-│   │   └── audit.py           # Audit trail logger
-│   ├── tools/                 # LangChain custom tools
-│   ├── models/                # DB models
-│   └── main.py                # FastAPI server
-│
+│   │   ├── graph.py           # Main StateGraph — nodes, edges, fan-out logic
+│   │   ├── state.py           # AgentState TypedDict (messages, ui, intent)
+│   │   ├── llm.py             # Lazy-loaded Gemini via lru_cache
+│   │   └── nodes/
+│   │       ├── router.py      # Intent classifier — Pydantic + Literal types
+│   │       ├── finance.py     # Expense extraction + interrupt + DB write
+│   │       ├── movie.py       # Movie extraction + Generative UI + interrupt + DB write
+│   │       └── journal.py     # Journal extraction + instant save + Generative UI
+│   ├── models/
+│   │   └── database.py        # SQLAlchemy models: Transaction, MovieLog, JournalEntry
+│   ├── api.py                 # FastAPI data server — /api/finance, /api/movies, /api/journal
+│   └── langgraph.json         # LangGraph server config
 ├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ui/            # Generative UI components
-│   │   │   │   ├── MovieLogCard.tsx
-│   │   │   │   ├── ExpenseCard.tsx
-│   │   │   │   ├── JournalEntryCard.tsx
-│   │   │   │   ├── ConfirmActionCard.tsx
-│   │   │   │   ├── BatchActionCard.tsx
-│   │   │   │   └── TripSummaryCard.tsx
-│   │   │   ├── ChatThread.tsx
-│   │   │   └── AuditLog.tsx
-│   │   ├── hooks/
-│   │   │   └── usePersonalOS.ts
-│   │   └── App.tsx
-│   └── langgraph.json         # UI component registry
-│
-├── langgraph.json             # LangGraph server config
+│   └── src/
+│       ├── App.tsx            # Main app — chat + stat tiles + modals + interrupt handling
+│       └── components/
+│           ├── ui/
+│           │   ├── MovieLogCard.tsx
+│           │   └── JournalEntryCard.tsx
+│           └── dashboard/
+│               ├── FinanceTab.tsx
+│               ├── MoviesTab.tsx
+│               └── JournalTab.tsx
 ├── README.md
-└── .env.example
+└── CONTEXT.md
 ```
 
 ---
 
-## 🗺️ Build Roadmap
+## How to Run
 
-### Phase 1 - Foundation ✅ (Start here)
+Requires three terminals:
 
-- [ ] Project setup: LangGraph server + React app
-- [ ] StateGraph skeleton with stub nodes
-- [ ] Intent router (classifies: finance / movie / journal / unknown)
-- [ ] First working node: Finance (structured output → DB write)
+```bash
+# Terminal 1 — LangGraph agent server (port 2024)
+cd backend
+source .venv/Scripts/activate   # or .venv/bin/activate on macOS/Linux
+langgraph dev
 
-### Phase 2 - Core Loop
+# Terminal 2 — FastAPI data server (port 8000)
+cd backend
+source .venv/Scripts/activate
+uvicorn api:app --port 8000 --reload
 
-- [ ] Human-in-the-loop confirmation before writes
-- [ ] Generative UI: first component pushed from graph to React
-- [ ] Movie tracker node + MovieLogCard component
-- [ ] Journal node + JournalEntryCard component
-
-### Phase 3 - Advanced Features
-
-- [ ] Multi-intent detection (one message → multiple nodes)
-- [ ] BatchActionCard for multi-action confirmation
-- [ ] Chroma memory integration (context awareness)
-- [ ] Audit Trail UI
-
-### Phase 4 - Polish
-
-- [ ] Trip Log subgraph + TripSummaryCard
-- [ ] Natural language query mode (_"How much did I spend last month?"_)
-- [ ] Calendar sync for scheduled payments
-- [ ] Streaming component props (cards appear and fill in real-time)
+# Terminal 3 — React frontend (port 5173)
+cd frontend
+pnpm dev
+```
 
 ---
 
-## 🎯 Why This Project Exists
+## Key Design Decisions
 
-Built as a portfolio project to demonstrate real-world usage of LangGraph's advanced patterns - not just a chatbot, but a full agentic system with routing, memory, human oversight, and generative UI.
+**Why no interrupt for journal?** Journal entries are low-stakes. Confirmation adds friction with zero benefit. This is an intentional decision — it shows understanding of when NOT to use human-in-the-loop.
 
-Every feature is designed to answer a specific interview question:
+**Why `method="json_schema"` not `function_calling`?** Gemini is more reliable with native JSON schema mode, which constrains generation at the token level. `function_calling` relies on post-processing and was producing occasional failures.
 
-- _"How did you handle multi-step agent workflows?"_ → StateGraph + conditional edges
-- _"Have you implemented human-in-the-loop?"_ → interrupt() + ConfirmActionCard
-- _"How did the frontend stay in sync with the agent?"_ → useStream() + Generative UI
-- _"How did the agent personalize over time?"_ → Chroma vector store memory
+**Why `lru_cache` on `get_llm()`?** `ChatGoogleGenerativeAI` validates the API key at instantiation. If instantiated at module import, it fails before `.env` is loaded. Lazy loading with `lru_cache` fixes this.
+
+**Why poll `/threads/{id}/state` for interrupts?** In LangGraph dev mode, `stream.interrupt` doesn't populate reliably when a run hits `interrupt()`. Polling thread state directly is the workaround.
+
+**Why resume with a dict, not an array?** LangGraph requires `{interrupt_id: value}` format for multiple parallel interrupts. Arrays fail with RuntimeError.
 
 ---
 
-_Building in silence. Demo when core systems are ready._
+## Database Models
 
-## Some rules
+```python
+Transaction:  id, amount, currency, category, description, type, created_at
+MovieLog:     id, title, status, progress, mood_tags (JSON), context_tags (JSON), notes, created_at
+JournalEntry: id, content, mood, tags (JSON), reminder_days, created_at
+```
 
-- General rule for this project: `feat:` for new things, `fix:` for bug fixes, `chore:` for setup/config.
+---
+
+## What's Next
+
+- **Chroma memory layer** — vector store so the agent learns patterns over time (e.g., "you usually tag dramas as Emotional")
+- **Audit trail UI** — timeline showing every agent decision: what it understood, planned, and committed
+- **Trip log module** — sub-graph for multi-stop travel logging with cost summaries
+- **LangSmith tracing** — full observability for every LLM call
+- **Soft delete / undo** — `deleted_at` column + undo last action
+- **Natural language queries** — "How much did I spend last month?" or "Show me all movies I marked as Inspirational"
+
+---
+
+## Some Rules
+
+- `feat:` for new things, `fix:` for bug fixes, `chore:` for setup/config.
