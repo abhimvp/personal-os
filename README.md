@@ -63,17 +63,18 @@ One message can trigger multiple nodes simultaneously. The router classifies int
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Agent Framework | LangGraph (StateGraph, interrupt, Send API) |
-| LLM | Google Gemini via `langchain-google-genai` |
-| Structured Output | LangChain `with_structured_output(method="json_schema")` |
-| Backend | Python + FastAPI |
-| Package Manager (Python) | `uv` |
-| Frontend | React + TypeScript + Vite |
-| Package Manager (JS) | `pnpm` |
-| Streaming UI | `@langchain/langgraph-sdk` — `useStream()` hook |
-| Database | SQLite via SQLAlchemy |
+| Layer | Technology | Version |
+|---|---|---|
+| Agent Framework | LangGraph (StateGraph, interrupt, Send API) | ≥1.1.1 |
+| LLM | Google Gemini 3.1 Flash Lite via `langchain-google-genai` | ≥4.2.1 |
+| LLM Framework | LangChain | ≥1.2.12 |
+| Structured Output | `with_structured_output(method="json_schema")` | — |
+| Backend | Python + FastAPI + Uvicorn | 3.12+ / ≥0.135.1 |
+| Package Manager (Python) | `uv` | Latest |
+| Frontend | React + TypeScript + Vite | 19 / 5.9 / 7.3 |
+| Package Manager (JS) | `pnpm` | 10.26 |
+| Streaming UI | `@langchain/langgraph-sdk` — `useStream()` hook | ≥1.7.2 |
+| Database | SQLite via SQLAlchemy | ≥2.0.48 |
 
 ---
 
@@ -92,34 +93,57 @@ One message can trigger multiple nodes simultaneously. The router classifies int
 
 ```
 personal-os/
-├── backend/
-│   ├── agent/
-│   │   ├── graph.py           # Main StateGraph — nodes, edges, fan-out logic
-│   │   ├── state.py           # AgentState TypedDict (messages, ui, intent)
-│   │   ├── llm.py             # Lazy-loaded Gemini via lru_cache
-│   │   └── nodes/
-│   │       ├── router.py      # Intent classifier — Pydantic + Literal types
-│   │       ├── finance.py     # Expense extraction + interrupt + DB write
-│   │       ├── movie.py       # Movie extraction + Generative UI + interrupt + DB write
-│   │       └── journal.py     # Journal extraction + instant save + Generative UI
+├── backend/                          # Python 3.12+ (uv)  ~19 files
+│   ├── agent/                        # LangGraph agent core
+│   │   ├── graph.py                  # StateGraph engine — routing, edges, fan-out logic
+│   │   ├── state.py                  # AgentState TypedDict (messages, ui, intent)
+│   │   ├── llm.py                    # Lazy-loaded Gemini via @lru_cache
+│   │   └── nodes/                    # Domain-specific graph nodes
+│   │       ├── router.py             # Intent classifier — Pydantic + Literal types → structured output
+│   │       ├── finance.py            # Transaction extraction + interrupt + DB write
+│   │       ├── movie.py              # Movie extraction + Generative UI card + interrupt + DB write
+│   │       └── journal.py            # Journal extraction + instant save + Generative UI
 │   ├── models/
-│   │   └── database.py        # SQLAlchemy models: Transaction, MovieLog, JournalEntry
-│   ├── api.py                 # FastAPI data server — /api/finance, /api/movies, /api/journal
-│   └── langgraph.json         # LangGraph server config
-├── frontend/
+│   │   └── database.py               # SQLAlchemy models: Transaction, MovieLog, JournalEntry + session mgmt
+│   ├── api.py                        # FastAPI REST server — /api/finance, /api/movies, /api/journal
+│   ├── main.py                       # Entry point (minimal — unused in current flow)
+│   ├── langgraph.json                # LangGraph dev server config — defines assistants
+│   └── pyproject.toml                # uv project config — dependencies, metadata
+│
+├── frontend/                         # React 19 + Vite 7 + TypeScript (pnpm)  ~22 files
 │   └── src/
-│       ├── App.tsx            # Main app — chat + stat tiles + modals + interrupt handling
+│       ├── App.tsx                   # Main hub — chat UI, useStream(), interrupts, stats tiles, modals
+│       ├── main.tsx                  # React root mount → #root
+│       ├── App.css                   # App-level styles
+│       ├── index.css                 # Base global styles
 │       └── components/
-│           ├── ui/
-│           │   ├── MovieLogCard.tsx
-│           │   └── JournalEntryCard.tsx
-│           └── dashboard/
-│               ├── FinanceTab.tsx
-│               ├── MoviesTab.tsx
-│               └── JournalTab.tsx
-├── README.md
-└── CONTEXT.md
+│           ├── ui/                   # Generative UI cards (pushed from graph nodes)
+│           │   ├── MovieLogCard.tsx   # Inline movie log card with status, mood, context tags
+│           │   └── JournalEntryCard.tsx  # Inline journal card with mood badge, tags, reminder
+│           └── dashboard/            # Modal tab views (fetch from FastAPI)
+│               ├── FinanceTab.tsx    # Transactions list + summary + category breakdown
+│               ├── MoviesTab.tsx     # Movie grid with status filters
+│               └── JournalTab.tsx    # Journal timeline + mood distribution
+│
+├── learning_notes/                   # Dev learning docs
+│   ├── useStream.md                  # Notes on @langchain/langgraph-sdk useStream hook
+│   └── why.md                        # Design rationale notes
+├── test_run_results_images/          # App screenshots
+├── CONTEXT.md                        # Project context / spec
+└── README.md
 ```
+
+---
+
+## Key Patterns
+
+| Pattern | Where | Details |
+|---|---|---|
+| **Conditional fan-out** | `graph.py` | Multi-intent messages routed to parallel nodes via `Send()` objects |
+| **Human-in-the-loop** | `finance.py`, `movie.py` | `interrupt()` pauses the graph for user approval before DB writes |
+| **Generative UI** | `movie.py`, `journal.py` | `push_ui_message()` renders typed React components inline in chat |
+| **Structured output** | `router.py` | LLM returns JSON Schema–validated intent classification via Pydantic |
+| **Lazy LLM singleton** | `llm.py` | `@lru_cache` avoids re-init and circular imports |
 
 ---
 
@@ -131,16 +155,24 @@ Requires three terminals:
 # Terminal 1 — LangGraph agent server (port 2024)
 cd backend
 source .venv/Scripts/activate   # or .venv/bin/activate on macOS/Linux
-langgraph dev
+langgraph dev                   # reads langgraph.json → loads agent/graph.py:graph
 
 # Terminal 2 — FastAPI data server (port 8000)
 cd backend
 source .venv/Scripts/activate
-uvicorn api:app --port 8000 --reload
+uvicorn api:app --port 8000 --reload   # serves /api/finance, /api/movies, /api/journal
 
 # Terminal 3 — React frontend (port 5173)
 cd frontend
-pnpm dev
+pnpm dev                        # Vite dev server → connects to LangGraph on :2024 + FastAPI on :8000
+```
+
+### Data Flow
+
+```
+React (:5173) ──useStream()──▶ LangGraph API (:2024) ──agent nodes──▶ SQLite
+       │                                                                 │
+       └────── fetch /api/* ──▶ FastAPI (:8000) ◀────── SQLAlchemy ──────┘
 ```
 
 ---

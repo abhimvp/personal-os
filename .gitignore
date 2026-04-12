@@ -2,3 +2,5 @@
 .venv/
 .langgraph_api/
 __pycache__/
+
+.claude/
